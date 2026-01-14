@@ -9,8 +9,22 @@ CACHE_DIR="${CLAUDE_TMUX_STATUS_CACHE_DIR:-$HOME/.cache/tmux-claude-status}"
 # Resolve pane id if we were passed a window id
 PANE_ID=""
 if [[ "$TARGET" == @* ]]; then
-  # target is a window id - get the active pane
-  PANE_ID="$(tmux display-message -p -t "$TARGET" '#{pane_id}' 2>/dev/null || true)"
+  # target is a window id - search for a Claude pane in this window
+  # This allows showing Claude status even when focused on a different pane (e.g., terminal)
+  while IFS= read -r pane; do
+    pane_cmd="$(tmux display-message -p -t "$pane" '#{pane_current_command}' 2>/dev/null || true)"
+    case "$pane_cmd" in
+      claude|node)
+        PANE_ID="$pane"
+        break
+        ;;
+    esac
+  done < <(tmux list-panes -t "$TARGET" -F '#{pane_id}' 2>/dev/null || true)
+
+  # Fallback: if no Claude pane found, use the active pane (original behavior)
+  if [[ -z "$PANE_ID" ]]; then
+    PANE_ID="$(tmux display-message -p -t "$TARGET" '#{pane_id}' 2>/dev/null || true)"
+  fi
 else
   # assume pane id
   PANE_ID="$TARGET"
