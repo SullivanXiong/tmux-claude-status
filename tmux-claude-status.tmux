@@ -32,8 +32,8 @@ inject_before_window_name() {
   fi
 
   if [[ "$fmt" == *"#{window_name}"* ]]; then
-    # Use sed for #{window_name} to avoid bash brace expansion issues
-    echo "$fmt" | sed "s/#{window_name}/${insert}#{window_name}/"
+    # Use sed with | delimiter to avoid issues with / in file paths
+    echo "$fmt" | sed "s|#{window_name}|${insert}#{window_name}|"
     return
   fi
 
