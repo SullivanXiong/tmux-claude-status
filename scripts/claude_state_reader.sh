@@ -9,16 +9,26 @@ CACHE_DIR="${CLAUDE_TMUX_STATUS_CACHE_DIR:-$HOME/.cache/tmux-claude-status}"
 # Resolve pane id if we were passed a window id
 PANE_ID=""
 if [[ "$TARGET" == @* ]]; then
-  # target is a window id - search for a Claude pane in this window
-  # This allows showing Claude status even when focused on a different pane (e.g., terminal)
+  # target is a window id - search for a pane with an active Claude session
+  # Check for state file existence rather than command name, since:
+  # - cwf/other wrappers run as bash/zsh with Claude as subprocess
+  # - Random node apps would falsely match "node" check
+  # - State files only exist when Claude Code hooks create them
+
+  # Get TMUX_SERVER_PID for state file path construction
+  TMUX_SERVER_PID="unknown"
+  if [[ -n "${TMUX:-}" ]]; then
+    TMUX_SERVER_PID="${TMUX#*,}"
+    TMUX_SERVER_PID="${TMUX_SERVER_PID%%,*}"
+  fi
+
   while IFS= read -r pane; do
-    pane_cmd="$(tmux display-message -p -t "$pane" '#{pane_current_command}' 2>/dev/null || true)"
-    case "$pane_cmd" in
-      claude|node)
-        PANE_ID="$pane"
-        break
-        ;;
-    esac
+    pane_num="${pane#%}"
+    state_file="$CACHE_DIR/tmux-${TMUX_SERVER_PID}-pane-${pane_num}.json"
+    if [[ -f "$state_file" ]]; then
+      PANE_ID="$pane"
+      break
+    fi
   done < <(tmux list-panes -t "$TARGET" -F '#{pane_id}' 2>/dev/null || true)
 
   # Fallback: if no Claude pane found, use the active pane (original behavior)
@@ -32,7 +42,7 @@ fi
 
 [[ -n "$PANE_ID" ]] || exit 0
 
-# Derive same filename as hook script
+# Derive same filename as hook script (may be recalculated from above if window search)
 PANE_NUM="${PANE_ID#%}"
 TMUX_SERVER_PID="unknown"
 if [[ -n "${TMUX:-}" ]]; then
