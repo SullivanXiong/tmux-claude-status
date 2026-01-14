@@ -43,13 +43,8 @@ fi
 STATE_FILE="$CACHE_DIR/tmux-${TMUX_SERVER_PID}-pane-${PANE_NUM}.json"
 [[ -f "$STATE_FILE" ]] || exit 0
 
-# Optionally ensure this pane is actually still running Claude
-# (If Claude exited and you're back to zsh, hide the indicator)
-PANE_CMD="$(tmux display-message -p -t "$PANE_ID" '#{pane_current_command}' 2>/dev/null || true)"
-case "$PANE_CMD" in
-  claude|node) : ;;    # keep it simple; customize if needed
-  *) exit 0 ;;
-esac
+# State file exists = Claude session is active (hooks manage lifecycle)
+# No need to check pane_current_command since cwf runs as bash/zsh but has Claude as subprocess
 
 # Check if jq is available
 if ! command -v jq >/dev/null 2>&1; then
