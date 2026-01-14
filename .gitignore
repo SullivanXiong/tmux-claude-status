@@ -1,0 +1,7 @@
+# Generated at runtime
+cache/
+*.cache
+
+# OS-specific
+.DS_Store
+Thumbs.db
