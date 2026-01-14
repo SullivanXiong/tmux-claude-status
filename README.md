@@ -1,4 +1,4 @@
-# tmux-claude-status v3.0
+# tmux-claude-status
 
 Real-time Claude Code status monitoring in tmux window tabs using official hooks API.
 
