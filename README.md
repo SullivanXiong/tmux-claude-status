@@ -214,6 +214,59 @@ The plugin uses Claude Code's official hooks API for deterministic state changes
 
 Hooks fire exactly when they should, giving you clean state transitions with zero guesswork.
 
+## Debugging
+
+The plugin includes comprehensive debug logging to help troubleshoot issues. Enable it with:
+
+```bash
+export CLAUDE_TMUX_STATUS_DEBUG=1
+claude  # Start Claude with debugging enabled
+```
+
+Debug logs are written to `/tmp/claude-tmux-hook-debug.log` and include:
+- Hook invocation events (SessionStart, UserPromptSubmit, Stop, etc.)
+- Pane ID resolution attempts and fallbacks
+- State file operations (reads, writes, lock acquisitions)
+- Error conditions (failed locks, missing panes, stale files)
+
+**View debug logs in real-time:**
+```bash
+tail -f /tmp/claude-tmux-hook-debug.log
+```
+
+**Example debug output:**
+```
+[12:37:21.3N] Hook called: SessionStart
+  TMUX_PANE=UNSET
+  Fallback 1: resolved PANE_ID=%50
+  SUCCESS: wrote ready to /Users/.../tmux-1205-pane-50.json
+```
+
+### State File Validation
+
+The plugin automatically validates and cleans up stale state files:
+
+1. **Age validation**: Files older than 1 hour are automatically removed
+2. **Pane existence**: Files for panes that no longer exist are cleaned up
+3. **Lock cleanup**: Stale lock directories (>60 minutes) are removed
+
+This prevents issues from:
+- Crashed Claude sessions leaving orphaned files
+- Pane splits/closes creating stale references
+- System restarts with leftover cache
+
+**Manual cleanup:**
+```bash
+# Remove all state files
+rm -rf ~/.cache/tmux-claude-status/*.json
+
+# Remove lock directories
+rm -rf ~/.cache/tmux-claude-status/*.lock
+
+# Restart tmux plugin
+tmux source-file ~/.tmux.conf
+```
+
 ## Troubleshooting
 
 ### Status not showing
@@ -318,7 +371,16 @@ If the status never changes back to ready after Claude finishes:
 
 ### Hooks not firing
 
-1. **Restart Claude Code** - Hooks are loaded at startup:
+1. **Enable debug mode** to see what's happening:
+   ```bash
+   export CLAUDE_TMUX_STATUS_DEBUG=1
+   claude
+
+   # In another terminal, watch the debug log
+   tail -f /tmp/claude-tmux-hook-debug.log
+   ```
+
+2. **Restart Claude Code** - Hooks are loaded at startup:
    ```bash
    # Exit Claude (Ctrl+D)
    # Start again
@@ -328,18 +390,73 @@ If the status never changes back to ready after Claude finishes:
    /hooks
    ```
 
-2. **Check settings.json syntax:**
+3. **Check settings.json syntax:**
    ```bash
    # Validate JSON
    cat ~/.claude/settings.json | jq .
    # Should not show syntax errors
    ```
 
-3. **Check hook paths are correct:**
+4. **Check hook paths are correct:**
    ```bash
    # Verify the path in settings.json exists
    ls -l ~/.tmux/plugins/tmux-claude-status/hooks/tmux-claude-status-hook.sh
    ```
+
+### Status showing incorrect state
+
+If the status shows "working" when Claude is ready, or vice versa:
+
+1. **Check for stale state files:**
+   ```bash
+   # List state files with ages
+   ls -lah ~/.cache/tmux-claude-status/*.json
+
+   # View current state
+   cat ~/.cache/tmux-claude-status/*.json | jq .
+
+   # Files older than 1 hour are automatically removed on next read
+   ```
+
+2. **Verify pane ID matches:**
+   ```bash
+   # Get your current pane ID
+   echo $TMUX_PANE
+
+   # Check if state file exists for this pane
+   ls ~/.cache/tmux-claude-status/tmux-*-pane-${TMUX_PANE#%}.json
+   ```
+
+3. **Test hook execution manually:**
+   ```bash
+   export CLAUDE_TMUX_STATUS_DEBUG=1
+
+   # Simulate different events
+   echo '{}' | ~/.tmux/plugins/tmux-claude-status/hooks/tmux-claude-status-hook.sh SessionStart
+   echo '{}' | ~/.tmux/plugins/tmux-claude-status/hooks/tmux-claude-status-hook.sh UserPromptSubmit
+   echo '{}' | ~/.tmux/plugins/tmux-claude-status/hooks/tmux-claude-status-hook.sh Stop
+
+   # Check debug log
+   cat /tmp/claude-tmux-hook-debug.log
+   ```
+
+### Running in wrapper scripts
+
+If Claude is launched via a wrapper script (like `cwf`), the plugin uses fallback pane resolution:
+
+1. **Fallback 1**: Queries tmux directly for pane ID
+2. **Fallback 2**: Matches by TTY if direct query fails
+
+This is logged when `CLAUDE_TMUX_STATUS_DEBUG=1`:
+```
+TMUX_PANE=UNSET
+Fallback 1: resolved PANE_ID=%50
+```
+
+If fallback resolution fails, check debug logs for errors:
+```bash
+tail -f /tmp/claude-tmux-hook-debug.log | grep ERROR
+```
 
 ## Performance
 

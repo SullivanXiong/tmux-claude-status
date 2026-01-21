@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Source helper functions
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/helpers.sh"
+
 TARGET="${1:-}"        # can be a pane id (%3) OR a window id (@1)
 MODE="${2:-inactive}"  # active|inactive
 
@@ -52,6 +56,26 @@ fi
 
 STATE_FILE="$CACHE_DIR/tmux-${TMUX_SERVER_PID}-pane-${PANE_NUM}.json"
 [[ -f "$STATE_FILE" ]] || exit 0
+
+# Validate state file age (max 1 hour)
+if command -v jq >/dev/null 2>&1; then
+    updated=$(jq -r '.updated // 0' "$STATE_FILE" 2>/dev/null || echo 0)
+    now=$(date +%s)
+    age=$((now - updated))
+
+    if [ "$age" -gt 3600 ]; then
+        rm -f "$STATE_FILE" 2>/dev/null
+        rm -rf "${STATE_FILE%.json}.lock" 2>/dev/null
+        exit 0
+    fi
+fi
+
+# Validate pane still exists in tmux
+if ! tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -q "^${PANE_ID}$"; then
+    rm -f "$STATE_FILE" 2>/dev/null
+    rm -rf "${STATE_FILE%.json}.lock" 2>/dev/null
+    exit 0
+fi
 
 # State file exists = Claude session is active (hooks manage lifecycle)
 # No need to check pane_current_command since cwf runs as bash/zsh but has Claude as subprocess

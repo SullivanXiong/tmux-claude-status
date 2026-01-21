@@ -11,6 +11,9 @@ set -euo pipefail
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 READER="$CURRENT_DIR/scripts/claude_state_reader.sh"
 
+# Source helper functions
+source "$CURRENT_DIR/scripts/helpers.sh"
+
 # Use window_id so the reader can resolve the active pane reliably
 STATUS_INACTIVE="#($READER '#{window_id}' inactive)"
 STATUS_ACTIVE="#($READER '#{window_id}' active)"
@@ -50,9 +53,38 @@ new_cur="$(inject_before_window_name "$cur" " $STATUS_ACTIVE ")"
 tmux set-option -gq window-status-format "$new_fmt"
 tmux set-option -gq window-status-current-format "$new_cur"
 
-# Set up periodic cleanup of stale cache files (older than 7 days)
-# This prevents accumulation of abandoned state files
-CACHE_DIR="${CLAUDE_TMUX_STATUS_CACHE_DIR:-$HOME/.cache/tmux-claude-status}"
-if [[ -d "$CACHE_DIR" ]]; then
-  find "$CACHE_DIR" -name '*.json' -mtime +7 -delete 2>/dev/null &
-fi
+# Initialize cache directory and clean stale files
+init_cache() {
+    local cache_dir="${CLAUDE_TMUX_STATUS_CACHE_DIR:-$HOME/.cache/tmux-claude-status}"
+    mkdir -p "$cache_dir"
+
+    # Get current pane IDs
+    local current_panes=$(mktemp)
+    tmux list-panes -a -F '#{pane_id}' 2>/dev/null > "$current_panes" || true
+
+    # Clean orphaned files (older than 60 minutes OR pane no longer exists)
+    find "$cache_dir" -name "tmux-*.json" -mmin +60 2>/dev/null | while read -r state_file; do
+        # Extract pane_id from state file if possible
+        if command -v jq >/dev/null 2>&1; then
+            pane_id=$(jq -r '.pane_id // empty' "$state_file" 2>/dev/null || true)
+
+            if [[ -n "$pane_id" ]]; then
+                # Check if pane still exists
+                if ! grep -q "^${pane_id}$" "$current_panes" 2>/dev/null; then
+                    rm -f "$state_file" 2>/dev/null
+                    rm -rf "${state_file%.json}.lock" 2>/dev/null
+                fi
+            fi
+        else
+            # If jq not available, just remove old files
+            rm -f "$state_file" 2>/dev/null
+        fi
+    done
+
+    # Clean any orphaned lock directories
+    find "$cache_dir" -name "*.lock" -type d -mmin +60 -exec rmdir {} \; 2>/dev/null || true
+
+    rm -f "$current_panes"
+}
+
+init_cache &
