@@ -15,7 +15,7 @@ PANE_ID=""
 if [[ "$TARGET" == @* ]]; then
   # target is a window id - search for a pane with an active Claude session
   # Check for state file existence rather than command name, since:
-  # - cwf/other wrappers run as bash/zsh with Claude as subprocess
+  # - Wrapper-script-launched sessions (e.g. the retired cwf launcher) run as bash/zsh with Claude as subprocess
   # - Random node apps would falsely match "node" check
   # - State files only exist when Claude Code hooks create them
 
@@ -78,7 +78,7 @@ if ! tmux list-panes -a -F '#{pane_id}' 2>/dev/null | grep -q "^${PANE_ID}$"; th
 fi
 
 # State file exists = Claude session is active (hooks manage lifecycle)
-# No need to check pane_current_command since cwf runs as bash/zsh but has Claude as subprocess
+# No need to check pane_current_command since wrapper-script-launched sessions (e.g. the retired cwf launcher) run as bash/zsh with Claude as subprocess
 
 # Check if jq is available
 if ! command -v jq >/dev/null 2>&1; then

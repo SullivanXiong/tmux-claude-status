@@ -442,7 +442,7 @@ If the status shows "working" when Claude is ready, or vice versa:
 
 ### Running in wrapper scripts
 
-If Claude is launched via a wrapper script (like `cwf`), the plugin uses fallback pane resolution:
+If Claude is launched via a wrapper script (e.g. the retired `cwf` launcher), the plugin uses fallback pane resolution:
 
 1. **Fallback 1**: Queries tmux directly for pane ID
 2. **Fallback 2**: Matches by TTY if direct query fails
